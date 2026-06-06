@@ -1,0 +1,85 @@
+# =============================================================
+# .github/workflows/deploy.yml
+# Build backend + frontend → push to ACR → deploy to AKS
+# =============================================================
+
+name: Build and Deploy to AKS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  # ===========================================================
+  # JOB 1 — Build & Push images to ACR
+  # ===========================================================
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: pfademo.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build & push Backend (FastAPI)
+        run: |
+          docker build -t pfademo.azurecr.io/backend:${{ github.sha }} ./backend
+          docker push pfademo.azurecr.io/backend:${{ github.sha }}
+          docker tag pfademo.azurecr.io/backend:${{ github.sha }} pfademo.azurecr.io/backend:latest
+          docker push pfademo.azurecr.io/backend:latest
+
+      - name: Build & push Frontend (React/Vite)
+        run: |
+          docker build -t pfademo.azurecr.io/frontend:${{ github.sha }} ./frontend
+          docker push pfademo.azurecr.io/frontend:${{ github.sha }}
+          docker tag pfademo.azurecr.io/frontend:${{ github.sha }} pfademo.azurecr.io/frontend:latest
+          docker push pfademo.azurecr.io/frontend:latest
+
+  # ===========================================================
+  # JOB 2 — Deploy to AKS
+  # ===========================================================
+  deploy:
+    name: Deploy to AKS
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      - name: Deploy Postgres (only if not already running)
+        run: kubectl apply -f k8s/postgres.yaml
+
+      - name: Inject commit SHA into backend manifest
+        run: sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/backend.yaml
+
+      - name: Inject commit SHA into frontend manifest
+        run: sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/frontend.yaml
+
+      - name: Deploy Backend
+        run: |
+          kubectl apply -f k8s/backend.yaml
+          kubectl rollout status deployment/backend --timeout=120s
+
+      - name: Deploy Frontend
+        run: |
+          kubectl apply -f k8s/frontend.yaml
+          kubectl rollout status deployment/frontend --timeout=120s
+
+      - name: Show running pods
+        run: kubectl get pods -o wide

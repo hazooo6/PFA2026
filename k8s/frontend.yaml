@@ -5,22 +5,18 @@ metadata:
   namespace: default
 spec:
   replicas: 2
-
   selector:
     matchLabels:
       app: frontend
-
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 25%
       maxUnavailable: 25%
-
   template:
     metadata:
       labels:
         app: frontend
-
     spec:
       affinity:
         podAntiAffinity:
@@ -31,14 +27,26 @@ spec:
                 matchLabels:
                   app: frontend
               topologyKey: kubernetes.io/hostname
-
       containers:
       - name: frontend
-        image: pfademo.azurecr.io/frontend:v2
+        image: pfademo.azurecr.io/frontend:IMAGE_TAG
         ports:
         - containerPort: 80
           protocol: TCP
-
+        imagePullPolicy: Always
       restartPolicy: Always
       dnsPolicy: ClusterFirst
       terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
