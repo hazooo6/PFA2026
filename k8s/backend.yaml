@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: default
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: backend
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+
+  template:
+    metadata:
+      labels:
+        app: backend
+
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: backend
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: backend
+        image: pfademo.azurecr.io/backend:v1
+
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+
+        env:
+        - name: PROJECT_NAME
+          value: PFA Project
+        - name: POSTGRES_SERVER
+          value: postgres
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          value: postgres
+        - name: POSTGRES_DB
+          value: app
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: FIRST_SUPERUSER
+          value: admin@example.com
+        - name: FIRST_SUPERUSER_PASSWORD
+          value: admin123
+        - name: BACKEND_CORS_ORIGINS
+          value: http://pfaiteam2026.duckdns.org,http://20.107.166.248,http://20.107.166.248:80,http://localhost:5173
+        - name: SECRET_KEY
+          value: dev-secret-key
+
+        imagePullPolicy: IfNotPresent
+
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 30
